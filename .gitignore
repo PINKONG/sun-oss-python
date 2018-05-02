@@ -4,5 +4,12 @@
 .pydevproject
 .settings
 .coverage
+*.bak
+*.jpg
+*.jpep
+*.png
+*.swp
+venv
 build
 dist
+sun_oss.egg-info
