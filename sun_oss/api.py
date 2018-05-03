@@ -16,6 +16,8 @@ from .models import qiniu_result_handler, qiniu_bool_result_handler, aliyun_list
 
 class _BucketBase(object):
 
+    _IMAGES_ALLOWED = ('.gif', '.jpg', '.jpeg', '.png', '.bmp', '.webp')
+
     def __init__(self, access_key_id, access_key_secret):
         self.id = access_key_id.strip()
         self.secret = access_key_secret.strip()
@@ -29,19 +31,23 @@ class _BucketBase(object):
         return self._do_object_exists(key)
 
     def put_object(self, data,
+                   key='',
                    headers=None,
                    progress_callback=None):
         """
-
+        上传一个普通文件。
         :param key:
         :param data:
         :param headers:
         :param progress_callback:
         :return:
         """
-        storage_path = self._get_storage_path(data)
-        if self.object_exists(storage_path):
-            return True
+        # 如果未指定key, 需要根据md5设置key值
+        storage_path = key if key else self._get_storage_path(data)
+
+        # 当key值是根据md5计算时,先判断是否已存在. 如是则无需重复上传.
+        if storage_path != key and self.object_exists(storage_path):
+            return storage_path
 
         if isinstance(data, str) and os.path.exists(data):
             data = open(data, 'rb')
@@ -70,7 +76,7 @@ class _BucketBase(object):
 
     def get_object_meta(self, key):
         """
-
+        获取文件基本元信息
         :param key:
         :return:
         """
@@ -81,23 +87,36 @@ class _BucketBase(object):
         md5_string = hashlib.md5(input_file.read()).hexdigest()
         return md5_string
 
-    def _get_image_storage_path(self, input_file):
+    def _get_image_storage_path(self, data, md5_string):
         if isinstance(file, Image.Image):
             image = file
         else:
-            image = Image.open(input_file)
+            image = Image.open(data)
 
         format = image.format.lower()
-        md5_string = self._get_file_md5(input_file)
         storage_path = "{0}/{1}/{2}.{3}".format(md5_string[:2], md5_string[2:4], md5_string, format)
         return storage_path
 
-    def _get_storage_path(self, input_file):
-        filename = getattr(input_file, 'filename', None)
-        _, extension = os.path.splitext(filename)
+    def _get_file_storage_path(self, filename, extension, md5_string):
+        if extension:
+            storage_path = "{0}/{1}/{2}{3}".format(md5_string[:2], md5_string[2:4], md5_string, extension)
+        else:
+            storage_path = "{0}/{1}/{2}".format(md5_string[:2], md5_string[2:4], md5_string)
+        return storage_path
 
-        return self._get_image_storage_path(input_file)
-        # return filename
+    def _get_storage_path(self, data):
+        filename = ''
+        extension = ''
+        if hasattr(data, 'filename'):
+            filename = getattr(data, 'filename', None)
+            _, extension = os.path.splitext(filename)
+
+        md5_string = self._get_file_md5(data)
+
+        # #图片
+        # if extension and extension.lower() in self._IMAGES_ALLOWED:
+        #     return self._get_image_storage_path(data, md5_string)
+        return self._get_file_storage_path(filename, extension, md5_string)
 
 
 class AliyunBucket(_BucketBase):
@@ -131,7 +150,7 @@ class AliyunBucket(_BucketBase):
         :return:
         """
         result = self.bucket.put_object(key, data, headers=headers, progress_callback=progress_callback)
-        return result.etag != ''
+        return key if result.etag != '' else None
 
     def _do_delete_object(self, key):
         return self.bucket.delete_object(key)
@@ -160,13 +179,19 @@ class QiniuBucket(_BucketBase):
 
     @qiniu_bool_result_handler
     @qiniu_error_handler
-    def _do_put_object(self, key, data,
+    def __do_put_object(self, key, data,
                    headers=None,
                    progress_callback=None):
         """
         """
         token = self.auth.upload_token(self.bucket_name, key, 3600)
         return qiniu.put_data(token, key, data, progress_handler=progress_callback)
+
+    def _do_put_object(self, key, data,
+                   headers=None,
+                   progress_callback=None):
+        ret = self.__do_put_object(key, data, headers, progress_callback)
+        return key if ret else None
 
     @qiniu_result_handler
     @qiniu_error_handler
@@ -227,8 +252,9 @@ class QcloudBucket(_BucketBase):
             CacheControl='no-cache'
         )
         if response:
-            return 'ETag' in response
-        return False
+            # return 'ETag' in response
+            return key
+        return None
 
     def _do_delete_object(self, key):
         response = self.client.delete_object(
