@@ -13,3 +13,4 @@ venv
 build
 dist
 sun_oss.egg-info
+examples/*.json

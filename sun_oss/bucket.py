@@ -11,16 +11,23 @@ import qiniu
 import qcloud_cos
 
 from .exceptions import qiniu_error_handler
-from .models import qiniu_result_handler, qiniu_bool_result_handler, aliyun_list_result_handler, qiniu_list_result_handler
+from .utils import qiniu_result_handler, qiniu_bool_result_handler, aliyun_list_result_handler, qiniu_list_result_handler
+from .utils import normalize_endpoint
 
 
 class _BucketBase(object):
 
     _IMAGES_ALLOWED = ('.gif', '.jpg', '.jpeg', '.png', '.bmp', '.webp')
 
-    def __init__(self, access_key_id, access_key_secret):
+    _endpoints = {}
+    _cdn_endpoints = {}
+
+    def __init__(self, access_key_id, access_key_secret, bucket_name, endpoint, cdn_endpoint):
         self.id = access_key_id.strip()
         self.secret = access_key_secret.strip()
+
+        self._add_endpoint(bucket_name, endpoint)
+        self._add_cdn_endpoint(bucket_name, cdn_endpoint)
 
     def object_exists(self, key):
         """
@@ -82,6 +89,36 @@ class _BucketBase(object):
         """
         return self._do_get_object_meta(key)
 
+    @classmethod
+    def get_image_url(cls, src, bucket_name, endpoint='', cdn_endpoint=''):
+        if not endpoint:
+            endpoints = cls._endpoints.get(cls.__name__)
+
+
+    def _add_endpoint(self, bucket_name, endpoint):
+        if not bucket_name or not endpoint:
+            return
+
+        class_name = self.__class__.__name__
+        if class_name not in self._endpoints:
+            class_endpoints = {}
+            self._endpoints[class_name] = class_endpoints
+
+        class_endpoints = self._endpoints[class_name]
+        class_endpoints['bucket_name'] = endpoint
+
+    def _add_cdn_endpoint(self, bucket_name, cdn_endpoint):
+        if not bucket_name or not cdn_endpoint:
+            return
+
+        class_name = self.__class__.__name__
+        if class_name not in self._cdn_endpoints:
+            class_cdn_endpoints = {}
+            self._cdn_endpoints[class_name] = class_cdn_endpoints
+
+            class_cdn_endpoints = self._cdn_endpoints[class_name]
+        class_cdn_endpoints['bucket_name'] = cdn_endpoint
+
     def _get_file_md5(self, input_file):
         input_file.seek(0)
         md5_string = hashlib.md5(input_file.read()).hexdigest()
@@ -121,8 +158,8 @@ class _BucketBase(object):
 
 class AliyunBucket(_BucketBase):
 
-    def __init__(self, access_key_id, access_key_secret, endpoint, bucket_name):
-        super(AliyunBucket, self).__init__(access_key_id, access_key_secret)
+    def __init__(self, access_key_id, access_key_secret, bucket_name, endpoint='', cdn_endpoint=''):
+        super(AliyunBucket, self).__init__(access_key_id, access_key_secret, bucket_name, endpoint, cdn_endpoint)
 
         self.auth = oss2.Auth(access_key_id, access_key_secret)
         self.bucket = oss2.Bucket(self.auth, endpoint, bucket_name)
@@ -157,8 +194,8 @@ class AliyunBucket(_BucketBase):
 
 
 class QiniuBucket(_BucketBase):
-    def __init__(self, access_key_id, access_key_secret, bucket_name):
-        super(QiniuBucket, self).__init__(access_key_id, access_key_secret)
+    def __init__(self, access_key_id, access_key_secret, bucket_name, endpoint='', cdn_endpoint=''):
+        super(QiniuBucket, self).__init__(access_key_id, access_key_secret, bucket_name, endpoint, cdn_endpoint)
 
         self.bucket_name = bucket_name
         self.auth = qiniu.Auth(access_key_id, access_key_secret)
@@ -205,8 +242,8 @@ class QiniuBucket(_BucketBase):
 
 
 class QcloudBucket(_BucketBase):
-    def __init__(self, access_key_id, access_key_secret, region, bucket_name, token=""):
-        super(QcloudBucket, self).__init__(access_key_id, access_key_secret)
+    def __init__(self, access_key_id, access_key_secret, region, bucket_name, token='', endpoint='', cdn_endpoint=''):
+        super(QcloudBucket, self).__init__(access_key_id, access_key_secret, bucket_name, endpoint, cdn_endpoint)
 
         self.config = qcloud_cos.CosConfig(Secret_id=access_key_id, Secret_key=access_key_secret, Region=region, Token=token)
         self.client = qcloud_cos.CosS3Client(self.config)
