@@ -3,6 +3,7 @@
 
 import os
 import oss2
+import re
 from functools import wraps
 from oss2.models import ListObjectsResult
 
@@ -105,4 +106,32 @@ def aliyun_list_result_handler(func):
         return None
 
     return decorator
+
+
+thumbnail_regex = re.compile(r'thumbnail/(w)/(\d{2,4})\b')
+
+
+def get_image_thumbnail_processing(processing):
+    """
+    返回缩略图宽度
+    :param processing:
+    :return:
+    """
+    if processing:
+        ret = thumbnail_regex.search(processing)
+        if ret:
+            return ret.group(2)
+    return None
+
+
+def get_image_corp_processing(processing):
+    return None
+
+
+def get_image_rotate_processing(processing):
+    return None
+
+
+def get_image_blur_processing(processing):
+    return None
 

@@ -12,6 +12,7 @@ import qcloud_cos
 
 from .exceptions import qiniu_error_handler
 from .utils import qiniu_result_handler, qiniu_bool_result_handler, aliyun_list_result_handler, qiniu_list_result_handler
+from .utils import get_image_thumbnail_processing, get_image_blur_processing, get_image_corp_processing, get_image_rotate_processing
 from .utils import normalize_endpoint
 
 
@@ -89,35 +90,15 @@ class _BucketBase(object):
         """
         return self._do_get_object_meta(key)
 
-    @classmethod
-    def get_image_url(cls, src, bucket_name, endpoint='', cdn_endpoint=''):
-        if not endpoint:
-            endpoints = cls._endpoints.get(cls.__name__)
-
-
     def _add_endpoint(self, bucket_name, endpoint):
         if not bucket_name or not endpoint:
             return
-
-        class_name = self.__class__.__name__
-        if class_name not in self._endpoints:
-            class_endpoints = {}
-            self._endpoints[class_name] = class_endpoints
-
-        class_endpoints = self._endpoints[class_name]
-        class_endpoints['bucket_name'] = endpoint
+        self._endpoints[bucket_name] = endpoint
 
     def _add_cdn_endpoint(self, bucket_name, cdn_endpoint):
         if not bucket_name or not cdn_endpoint:
             return
-
-        class_name = self.__class__.__name__
-        if class_name not in self._cdn_endpoints:
-            class_cdn_endpoints = {}
-            self._cdn_endpoints[class_name] = class_cdn_endpoints
-
-            class_cdn_endpoints = self._cdn_endpoints[class_name]
-        class_cdn_endpoints['bucket_name'] = cdn_endpoint
+        self._cdn_endpoints[bucket_name] = cdn_endpoint
 
     def _get_file_md5(self, input_file):
         input_file.seek(0)
@@ -155,6 +136,36 @@ class _BucketBase(object):
         #     return self._get_image_storage_path(data, md5_string)
         return self._get_file_storage_path(filename, extension, md5_string)
 
+    @classmethod
+    def get_image_url(cls, photo_src, bucket_name, endpoint='', cdn_endpoint=''):
+        # 图片访问点，优先使用配置的cdn地址
+        image_endpoint = cdn_endpoint
+        if not image_endpoint:
+            image_endpoint = cls._cdn_endpoints.get(bucket_name)
+        if not image_endpoint:
+            image_endpoint = endpoint
+        if not image_endpoint:
+            image_endpoint = cls._endpoints.get(bucket_name)
+        image_endpoint = normalize_endpoint(image_endpoint)
+
+        assert image_endpoint, "请设置访问点"
+
+        info = photo_src.split('@')
+        if len(info) > 1:
+            photo_key, processing = info
+        else:
+            photo_key, processing = photo_src, None
+
+        thumbnail_processing = get_image_thumbnail_processing(processing)
+        corp_processing = get_image_corp_processing(processing)
+        blur_processing = get_image_blur_processing(processing)
+        rotate_processing = get_image_rotate_processing(processing)
+
+        post_processing = cls._get_image_processing(thumbnail=thumbnail_processing, corp=corp_processing, blur=blur_processing, rotate=rotate_processing)
+        if post_processing:
+            return image_endpoint + '/' + photo_key + '?' + post_processing
+        return image_endpoint + '/' + photo_key
+
 
 class AliyunBucket(_BucketBase):
 
@@ -191,6 +202,16 @@ class AliyunBucket(_BucketBase):
 
     def _do_delete_object(self, key):
         return self.bucket.delete_object(key)
+
+    @classmethod
+    def _get_image_processing(cls, thumbnail=None, corp=None, rotate=None, blur=None):
+        operators = []
+        if thumbnail:
+            operators.append('resize,w_'+thumbnail)
+        if operators:
+            operators.insert(0, 'x-oss-process=image')
+            return '/'.join(operators)
+        return None
 
 
 class QiniuBucket(_BucketBase):
@@ -239,6 +260,16 @@ class QiniuBucket(_BucketBase):
     @qiniu_error_handler
     def _do_delete_object(self, key):
         return self.bucket.delete(self.bucket_name, key)
+
+    @classmethod
+    def _get_image_processing(cls, thumbnail=None, corp=None, rotate=None, blur=None):
+        operators = []
+        if thumbnail:
+            operators.append('thumbnail/'+thumbnail+'x')
+        if operators:
+            operators.insert(0, 'imageMogr2')
+            return '/'.join(operators)
+        return None
 
 
 class QcloudBucket(_BucketBase):
@@ -299,3 +330,13 @@ class QcloudBucket(_BucketBase):
             Key=key
         )
         return True
+
+    @classmethod
+    def _get_image_processing(cls, thumbnail=None, corp=None, rotate=None, blur=None):
+        operators = []
+        if thumbnail:
+            operators.append('thumbnail/'+thumbnail+'x')
+        if operators:
+            operators.insert(0, 'imageMogr2')
+            return '/'.join(operators)
+        return None
