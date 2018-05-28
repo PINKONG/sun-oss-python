@@ -31,5 +31,5 @@ setup(
 
     license="PSF",
     keywords="OSS Integration Aliyun Qiniu Qcloud",
-    url="http://example.com/HelloWorld/",
+    url="https://github.com/PINKONG/sun-oss-python",
 )
