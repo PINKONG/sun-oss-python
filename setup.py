@@ -11,7 +11,7 @@ try:
 except ImportError:
     from distutils.core import setup
 
-with open('README.rst', 'rb') as f:
+with open('README.txt', 'rb') as f:
     readme = f.read().decode('utf-8')
 
 setup(
@@ -31,5 +31,5 @@ setup(
 
     license="PSF",
     keywords="OSS Integration Aliyun Qiniu Qcloud",
-    url="http://example.com/HelloWorld/",
+    url="https://github.com/PINKONG/sun-oss-python",
 )
