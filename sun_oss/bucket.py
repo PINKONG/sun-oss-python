@@ -62,6 +62,10 @@ class _BucketBase(object):
         else:
             data.seek(0)
 
+        # TODO: 获取文件字节流.为了兼容腾讯,如果data是Flask的FileStorage,会上传空数据
+        if hasattr(data, 'read'):
+            data = data.read()
+
         return self._do_put_object(storage_path, data, headers, progress_callback)
 
     def delete_object(self, key):

@@ -26,7 +26,7 @@ setup(
 
     install_requires=['qiniu==7.2.0',
                       'oss2==2.4.0',
-                      'cos-python-sdk-v5==1.4.0'],
+                      'cos-python-sdk-v5==1.5.0'],
     include_package_data=True,
 
     license="PSF",
